@@ -1,43 +1,65 @@
 //@version=6
-indicator("EMA 9/21/50", overlay=true)
+indicator("EMA 9/21/50", overlay=true, precision=2, format=format.price, max_labels_count=500)
 
-// Input parameters
-showEMA9 = input.bool(true, "Show EMA 9", group="Display Settings")
-showEMA21 = input.bool(true, "Show EMA 21", group="Display Settings")
-showEMA50 = input.bool(true, "Show EMA 50", group="Display Settings")
-showCrossLabels = input.bool(true, "Show Cross Labels", group="Display Settings")
+// ===== Inputs =====
+src = input.source(close, "Source", group="Source")
+showRibbon = input.bool(true,  "Shade 20 vs 50 Distance", group="Visuals")
+showShapes = input.bool(true,  "Show Cross Labels",       group="Visuals")
 
-// Calculate EMAs
-ema9 = ta.ema(close, 9)
-ema21 = ta.ema(close, 21)
-ema50 = ta.ema(close, 50)
+// ===== Colors =====
+const color COL9    = color.teal
+const color COL21   = color.orange
+const color COL50   = color.purple
+const color COL_GLD = color.green
+const color COL_DTH = color.red
+const int   TR_FILL = 85
 
-// Plot EMAs
-plot(showEMA9 ? ema9 : na, "EMA 9", color=color.yellow, linewidth=2)
-plot(showEMA21 ? ema21 : na, "EMA 21", color=color.blue, linewidth=2)
-plot(showEMA50 ? ema50 : na, "EMA 50", color=color.red, linewidth=2)
+// ===== MAs (固定周期：9/21/50) =====
+ema9_raw  = ta.ema(src, 9)
+ema21_raw = ta.ema(src, 21)
+ema50_raw = ta.ema(src, 50)
 
-// Detect crosses
-crossUp9_21 = ta.crossover(ema9, ema21)
-crossDown9_21 = ta.crossunder(ema9, ema21)
-crossUp9_50 = ta.crossover(ema9, ema50)
-crossDown9_50 = ta.crossunder(ema9, ema50)
+// 为了与 SMA 脚本“未形成=不显示”的语义一致：前 len-1 根返回 na
+ema9  = bar_index >= 9  - 1 ? ema9_raw  : na
+ema21 = bar_index >= 21 - 1 ? ema21_raw : na
+ema50 = bar_index >= 50 - 1 ? ema50_raw : na
 
-// Plot labels for crosses
-if showCrossLabels and crossUp9_21
-    label.new(bar_index, low, "9↑21", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.small)
+// ===== Plots =====
+p9  = plot(ema9,  "EMA 9",  color=COL9,  linewidth=1, linestyle=plot.linestyle_dashed)
+p21 = plot(ema21, "EMA 21", color=COL21, linewidth=1)
+p50 = plot(ema50, "EMA 50", color=COL50, linewidth=2)
 
-if showCrossLabels and crossDown9_21
-    label.new(bar_index, high, "9↓21", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+// Ribbon（对齐你原脚本逻辑：用“快 vs 中”着色）
+fill(p9, p21, color = showRibbon and not na(ema9) and not na(ema21)
+                 ? color.new((ema9 >= ema21 ? COL9 : COL21), TR_FILL) : na)
 
-if showCrossLabels and crossUp9_50
-    label.new(bar_index, low, "9↑50", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.small)
+// ===== Cross logic =====
+co_9_21   = ta.crossover(ema9,  ema21)
+cu_9_21   = ta.crossunder(ema9,  ema21)
+co_21_50  = ta.crossover(ema21, ema50)
+cu_21_50  = ta.crossunder(ema21, ema50)
 
-if showCrossLabels and crossDown9_50
-    label.new(bar_index, high, "9↓50", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+// ===== Labels =====
+if showShapes and co_9_21
+    label.new(bar_index, na, xloc=xloc.bar_index, yloc=yloc.belowbar, text="9 cross over 21",  style=label.style_label_up,   color=COL9,  textcolor=color.white, size=size.tiny)
+if showShapes and cu_9_21
+    label.new(bar_index, na, xloc=xloc.bar_index, yloc=yloc.abovebar, text="9 cross under 21", style=label.style_label_down, color=COL21, textcolor=color.white, size=size.tiny)
+if showShapes and co_21_50
+    label.new(bar_index, na, xloc=xloc.bar_index, yloc=yloc.belowbar, text="21 cross over 50", style=label.style_label_up,   color=COL_GLD, textcolor=color.white, size=size.tiny)
+if showShapes and cu_21_50
+    label.new(bar_index, na, xloc=xloc.bar_index, yloc=yloc.abovebar, text="21 cross under 50",style=label.style_label_down, color=COL_DTH, textcolor=color.white, size=size.tiny)
 
-// Alert conditions
-alertcondition(crossUp9_21, "EMA 9 crosses above EMA 21", "EMA 9 has crossed above EMA 21")
-alertcondition(crossDown9_21, "EMA 9 crosses below EMA 21", "EMA 9 has crossed below EMA 21")
-alertcondition(crossUp9_50, "EMA 9 crosses above EMA 50", "EMA 9 has crossed above EMA 50")
-alertcondition(crossDown9_50, "EMA 9 crosses below EMA 50", "EMA 9 has crossed below EMA 50")
+// ===== Alerts =====
+x_9_21   = ta.cross(ema9,  ema21)
+x_21_50  = ta.cross(ema21, ema50)
+x_px_9   = ta.cross(src,   ema9)
+x_px_21  = ta.cross(src,   ema21)
+x_px_50  = ta.cross(src,   ema50)
+x_any    = x_9_21 or x_21_50 or x_px_9 or x_px_21 or x_px_50
+
+alertcondition(x_9_21,  "EMA9 crosses EMA21",  "⚠️ ATTENTION!!! EMA9 crossed EMA21")
+alertcondition(x_21_50, "EMA21 crosses EMA50", "⚠️ ATTENTION!!! EMA21 crossed EMA50")
+alertcondition(x_px_9,  "Price crosses EMA9",  "⚠️ ATTENTION!!! Price crossed EMA9")
+alertcondition(x_px_21, "Price crosses EMA21", "⚠️ ATTENTION!!! Price crossed EMA21")
+alertcondition(x_px_50, "Price crosses EMA50", "⚠️ ATTENTION!!! Price crossed EMA50")
+alertcondition(x_any,   "ANY: EMA/Price crosses (9/21/50)", "⚠️ ATTENTION!!! EMA or Price cross detected (9/21/50)")
